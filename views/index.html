@@ -1,0 +1,117 @@
+<div>
+    <h1>Text</h1>
+    <input id="upload-files" name="upload-files" multiple class="input-file" type="file" accept="image/*">
+    <button id="send">Send</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.min.js" type="text/javascript"></script>
+<script src="https://code.jquery.com/jquery-2.1.4.min.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+    $(function () {
+        var filesInput = $('#upload-files');
+        $('#send').on('click', function() {
+            var files = filesInput[0].files;
+            console.log(files.length);
+
+            function onSuccess(response) {
+                console.log(response);
+            }
+
+            function onError(response) {
+                console.log(response);
+            }
+
+            upload(files, {}, onSuccess, onError);
+        });
+    });
+
+    function uploadFiles(url, files, options, onSuccess, onError) {
+        var xhr = new XMLHttpRequest();
+        xhr.onload = function () {
+            if (xhr.status === 200) {
+                onSuccess(jQuery.parseJSON(xhr.response));
+            } else {
+                onError(xhr.response);
+            }
+        }
+        xhr.onerror = function () {
+            onError(xhr.response);
+        }
+
+        //xhr.overrideMimeType('text/plain; charset=x-user-defined-binary');
+
+        var formData = new FormData();
+        Object.keys(files).forEach(function(key){
+            formData.append(key, files[key]);
+        });
+
+        Object.keys(options).forEach(function(key){
+            formData.append(key, options[key]);
+        });
+
+        formData.append('key', 'value');
+        
+        xhr.open('POST', url, true);
+        xhr.send(formData);
+    }
+
+    function upload(files, data, onFramesUploaded, onLoadCompleted, chunkSize) {
+        var UPLOADING_COUNT = 2;
+        var failedChunks = [];
+
+        onFramesUploaded = onFramesUploaded || _.noop;
+        onLoadCompleted = onLoadCompleted || _.noop;
+        
+        var uploadedCount = 0;
+        chunkSize = chunkSize || 50;
+
+        var brokenFiles = [];
+        chunks = _.chunk(files, chunkSize);
+        function uploadChunk() {
+            var filesDict = {};
+            var chunk = chunks[chunkIndex++];
+            if (!chunk) {
+                return;
+            }
+
+            for (var i = 0; i < chunk.length; ++i) {
+                filesDict['file_' + i] = chunk[i];
+            }
+
+            function endCallback(err, response) {
+                if (response) {
+                    var count = response.data.frames.length;
+                    uploadedCount += count;
+
+                    console.log(response);
+                    onFramesUploaded(null, count, data);
+
+                    if (chunk.length !== response.data.frames.length) { 
+                        // Some files were not uploaded
+                        console.error('Chunk', chunk, response);
+                    }
+                }
+
+                if (uploadedCount >= files.length) {
+                    return onLoadCompleted(data);
+                } else {
+                    uploadChunk(chunkIndex);
+                }
+            }
+
+            uploadFiles('/', filesDict, {},
+            function (response) {
+                endCallback(null, response);
+            },
+            function (response) {
+                brokenFiles = brokenFiles.concat(chunk);
+                endCallback(response, null);
+            });
+        }
+
+        var chunkIndex = 0;
+        for (var i = 0; i < Math.min(UPLOADING_COUNT, chunks.length); ++i)
+            uploadChunk();
+    }
+</script>
